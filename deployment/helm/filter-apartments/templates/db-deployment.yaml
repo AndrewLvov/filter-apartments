@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "filterappartments-chart.fullname" . }}-db
+  name: {{ include "filterapartments-chart.fullname" . }}-db
   labels:
-    {{- include "filterappartments-chart.labels" . | nindent 4 }}
+    {{- include "filterapartments-chart.labels" . | nindent 4 }}
     app.kubernetes.io/component: database
 spec:
   replicas: 1
   selector:
     matchLabels:
-      {{- include "filterappartments-chart.selectorLabels" . | nindent 6 }}
+      {{- include "filterapartments-chart.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: database
   template:
     metadata:
       labels:
-        {{- include "filterappartments-chart.selectorLabels" . | nindent 8 }}
+        {{- include "filterapartments-chart.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: database
     spec:
       containers:
@@ -40,7 +40,7 @@ spec:
       volumes:
         - name: postgres-data
           persistentVolumeClaim:
-            claimName: {{ include "filterappartments-chart.fullname" . }}-db-pvc
+            claimName: {{ include "filterapartments-chart.fullname" . }}-db-pvc
         - name: init-scripts
           configMap:
             name: filterapartments-init-scripts
@@ -48,9 +48,9 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "filterappartments-chart.fullname" . }}-db
+  name: {{ include "filterapartments-chart.fullname" . }}-db
   labels:
-    {{- include "filterappartments-chart.labels" . | nindent 4 }}
+    {{- include "filterapartments-chart.labels" . | nindent 4 }}
     app.kubernetes.io/component: database
 spec:
   ports:
@@ -59,15 +59,15 @@ spec:
       protocol: TCP
       name: postgres
   selector:
-    {{- include "filterappartments-chart.selectorLabels" . | nindent 4 }}
+    {{- include "filterapartments-chart.selectorLabels" . | nindent 4 }}
     app.kubernetes.io/component: database
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: {{ include "filterappartments-chart.fullname" . }}-db-pvc
+  name: {{ include "filterapartments-chart.fullname" . }}-db-pvc
   labels:
-    {{- include "filterappartments-chart.labels" . | nindent 4 }}
+    {{- include "filterapartments-chart.labels" . | nindent 4 }}
     app.kubernetes.io/component: database
 spec:
   accessModes:
