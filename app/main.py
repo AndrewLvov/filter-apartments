@@ -148,7 +148,11 @@ async def extract_otodom_info(url):
         ''')
 
         # Extract full content for animal-related checks
-        year_built = year_built and int(year_built)
+        try:
+            year_built = year_built and int(year_built)
+        except ValueError:
+            print(f"Failed to extract year built from {year_built}")
+            year_built = None
         content = await page.content()
         
         # Check for "bez zwierząt" and "zwierz"
