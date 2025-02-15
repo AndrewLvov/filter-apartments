@@ -56,22 +56,4 @@ tolerations: []
 
 affinity: {}
 
-# PostgreSQL configuration
-postgresql:
-  enabled: true
-  auth:
-    database: filterapartments
-    username: filterapartments
-  primary:
-    initdb:
-      scriptsConfigMap: filterapartments-init-scripts
-    persistence:
-      size: 1Gi
-
-# Application configuration
-config:
-  database:
-    host: "{{ .Release.Name }}-postgresql"
-    port: 5432
-    name: filterapartments
-    user: filterapartments
+# Application configuration is managed via secrets
