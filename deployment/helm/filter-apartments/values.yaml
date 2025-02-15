@@ -56,4 +56,18 @@ tolerations: []
 
 affinity: {}
 
+# PostgreSQL configuration
+postgresql:
+  enabled: true
+  auth:
+    database: filterapartments
+    username: filterapartments
+    existingSecret: "filter-apartments"
+    passwordKey: "postgres_password"
+  primary:
+    initdb:
+      scriptsConfigMap: filterapartments-init-scripts
+    persistence:
+      size: 1Gi
+
 # Application configuration is managed via secrets
