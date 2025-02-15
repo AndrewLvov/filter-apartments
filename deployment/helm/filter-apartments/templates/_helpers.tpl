@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "filterappartments-chart.name" -}}
+{{- define "filterapartments-chart.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "filterappartments-chart.fullname" -}}
+{{- define "filterapartments-chart.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "filterappartments-chart.chart" -}}
+{{- define "filterapartments-chart.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "filterappartments-chart.labels" -}}
-helm.sh/chart: {{ include "filterappartments-chart.chart" . }}
-{{ include "filterappartments-chart.selectorLabels" . }}
+{{- define "filterapartments-chart.labels" -}}
+helm.sh/chart: {{ include "filterapartments-chart.chart" . }}
+{{ include "filterapartments-chart.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -45,17 +45,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "filterappartments-chart.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "filterappartments-chart.name" . }}
+{{- define "filterapartments-chart.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "filterapartments-chart.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "filterappartments-chart.serviceAccountName" -}}
+{{- define "filterapartments-chart.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "filterappartments-chart.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "filterapartments-chart.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}

@@ -2,14 +2,14 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "filterappartments-chart.fullname" . }}
+  name: {{ include "filterapartments-chart.fullname" . }}
   labels:
-    {{- include "filterappartments-chart.labels" . | nindent 4 }}
+    {{- include "filterapartments-chart.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "filterappartments-chart.fullname" . }}
+    name: {{ include "filterapartments-chart.fullname" . }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:
