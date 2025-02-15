@@ -1,0 +1,77 @@
+# Default values for filterapprtments-chart.
+replicaCount: 1
+
+image:
+  repository: 741769145503.dkr.ecr.eu-central-1.amazonaws.com/filter-apartments
+  pullPolicy: IfNotPresent
+  tag: "0.1.0"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# PostgreSQL configuration
+postgresql:
+  enabled: true
+  auth:
+    database: filterapartments
+    username: filterapartments
+  primary:
+    initdb:
+      scriptsConfigMap: filterapartments-init-scripts
+    persistence:
+      size: 1Gi
+
+# Application configuration
+config:
+  database:
+    host: "{{ .Release.Name }}-postgresql"
+    port: 5432
+    name: filterapartments
+    user: filterapartments
