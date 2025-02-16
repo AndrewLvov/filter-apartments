@@ -57,18 +57,25 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
                   name: filter-apartments
                   key: database_url
-            - name: POSTGRES_PASSWORD
+            - name: TELEGRAM_API_ID
               valueFrom:
                 secretKeyRef:
                   name: filter-apartments
-                  key: postgres_password
-            - name: TELEGRAM_SESSION_PATH
-              value: {{ .Values.session.path | quote }}
+                  key: telegram_api_id
+            - name: TELEGRAM_API_HASH
+              valueFrom:
+                secretKeyRef:
+                  name: filter-apartments
+                  key: telegram_api_hash
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}

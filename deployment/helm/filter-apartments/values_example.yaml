@@ -59,7 +59,7 @@ affinity: {}
 # Persistent Volume Claim for bot session
 persistence:
   enabled: true
-  storageClass: "standard" # Using default storage class
+  storageClass: "standard"
   accessModes:
     - ReadWriteOnce
   size: 1Gi
@@ -70,8 +70,14 @@ volumeMounts:
   - name: bot-session
     mountPath: /app/session
 
-# Application configuration is managed via secrets
-
 # Session configuration
 session:
   path: /app/session/bot
+
+# Environment variables
+env:
+  TELEGRAM_INPUT_CHANNEL_ID: "-1001726457020"
+  TELEGRAM_OUTPUT_GROUP_ID: "-4517914776"
+  PROCESS_FROM_DATE: "2024-09-08 00:00:00"
+  TELEGRAM_PHONE: "+380974877049"
+  TELEGRAM_SESSION_PATH: "/app/session/bot"
