@@ -12,7 +12,8 @@ dependencies = [
     "sqlalchemy>=2.0",
     "python-dotenv>=1.0",
     "playwright>=1.0",
-    "pytz>=2024.1"
+    "pytz>=2024.1",
+    "psycopg2-binary>=2.9.10",
 ]
 
 [build-system]
