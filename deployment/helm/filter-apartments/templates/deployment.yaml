@@ -23,13 +23,33 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
-      {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
+        - name: ecr-registry-secret
+        {{- with .Values.imagePullSecrets }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
       serviceAccountName: {{ include "filterapartments-chart.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: copy-bot-session
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |
+              if [ ! -f /session/bot.session ]; then
+                echo "Copying initial bot session files..."
+                cp /session-secret/bot.session /session/bot.session
+                # cp /session-secret/bot.session-journal /session/bot.session-journal
+              else
+                echo "Bot session files already exist, skipping copy..."
+              fi
+          volumeMounts:
+            - name: bot-session
+              mountPath: /session
+            - name: bot-session-secret
+              mountPath: /session-secret
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
@@ -47,6 +67,8 @@ spec:
                 secretKeyRef:
                   name: filter-apartments
                   key: postgres_password
+            - name: TELEGRAM_SESSION_PATH
+              value: {{ .Values.session.path | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -61,12 +83,13 @@ spec:
           volumeMounts:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-      imagePullSecrets:
-        - name: ecr-registry-secret
-      {{- with .Values.volumes }}
       volumes:
+        - name: bot-session-secret
+          secret:
+            secretName: bot-session-file
+        {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

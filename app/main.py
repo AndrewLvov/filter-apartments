@@ -363,7 +363,8 @@ async def process_message(event, client):
         await send_to_telegram(client, OUTPUT_CHAT_ID, formatted_message, media)
 
 async def main():
-    client = TelegramClient('me', API_ID, API_HASH)
+    session_path = os.getenv('TELEGRAM_SESSION_PATH', '/app/session/bot')
+    client = TelegramClient(session_path, API_ID, API_HASH)
     # await client.start(bot_token=BOT_TOKEN)
     await client.start(phone=os.getenv("TELEGRAM_PHONE"))
     
@@ -388,4 +389,3 @@ async def main():
 if __name__ == '__main__':
     import asyncio
     asyncio.run(main())
-

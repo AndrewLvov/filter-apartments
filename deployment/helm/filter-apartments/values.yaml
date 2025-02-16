@@ -56,4 +56,28 @@ tolerations: []
 
 affinity: {}
 
+# Persistent Volume Claim for bot session
+persistence:
+  enabled: true
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 1Gi
+  annotations: {}
+
+# Volume mounts for the main container
+volumeMounts:
+  - name: bot-session
+    mountPath: /app/session
+
+# Volumes configuration
+volumes:
+  - name: bot-session
+    persistentVolumeClaim:
+      claimName: filter-apartments-session
+
 # Application configuration is managed via secrets
+
+# Session configuration
+session:
+  path: /app/session/bot
