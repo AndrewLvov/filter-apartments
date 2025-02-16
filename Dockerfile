@@ -12,4 +12,4 @@ ENV PATH="/root/.local/bin/:$PATH"
 COPY . .
 RUN uv sync
 
-CMD ["python", "app/main.py"]
+CMD ["uv", "run", "app/main.py"]
