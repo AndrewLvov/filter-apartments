@@ -35,15 +35,10 @@ spec:
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
-            - name: init-scripts
-              mountPath: /docker-entrypoint-initdb.d
       volumes:
         - name: postgres-data
           persistentVolumeClaim:
             claimName: {{ include "filterapartments-chart.fullname" . }}-db-pvc
-        - name: init-scripts
-          configMap:
-            name: filterapartments-init-scripts
 ---
 apiVersion: v1
 kind: Service

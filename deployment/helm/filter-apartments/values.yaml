@@ -1,4 +1,4 @@
-# Default values for filterapprtments-chart.
+# Default values for filterapartments-chart.
 replicaCount: 1
 
 image:
