@@ -87,9 +87,9 @@ spec:
         - name: bot-session-secret
           secret:
             secretName: bot-session-file
-        {{- with .Values.volumes }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        - name: bot-session
+          persistentVolumeClaim:
+            claimName: {{ include "filterapartments-chart.fullname" . }}-session
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
