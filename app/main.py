@@ -42,7 +42,7 @@ class PermissionDenied(Exception):
 
 class Advert(Base):
     __tablename__ = 'adverts'
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
     external_id = Column(Integer, unique=True)
     url = Column(String, unique=False)
     district = Column(String)
