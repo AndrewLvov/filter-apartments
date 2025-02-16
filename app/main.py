@@ -349,12 +349,12 @@ async def process_message(event, client):
 
     # Filter and send the advert
     filters = (
-        filter_room_count(2, 3),
+        filter_room_count(3, 4),
         filter_regions(exclude=(
             'Praga_Południe', 'Praga_Północ', "Białołęka")),
         filter_area(min_area=50, max_area=200),
         filter_price_to_area_ratio(min_ratio=60, max_ratio=110),
-        filter_year_built(min_year=2017),
+        # filter_year_built(min_year=2017),
     )
     filter_results = {f.__name__: f(advert) for f in filters}
     print(f"Filter results: {json.dumps(filter_results, indent=4)}")
