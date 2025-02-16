@@ -59,7 +59,7 @@ affinity: {}
 # Persistent Volume Claim for bot session
 persistence:
   enabled: true
-  storageClass: ""
+  storageClass: "standard" # Using default storage class
   accessModes:
     - ReadWriteOnce
   size: 1Gi
