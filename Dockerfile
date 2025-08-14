@@ -30,10 +30,12 @@ ADD https://astral.sh/uv/install.sh /uv-installer.sh
 RUN sh /uv-installer.sh && rm /uv-installer.sh
 ENV PATH="/root/.local/bin/:$PATH"
 
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --frozen --no-editable
 COPY . .
-RUN uv sync
 
 # Install Playwright browsers after installing playwright through uv sync
-RUN uv run playwright install --with-deps
+RUN uv run --no-sync playwright install --with-deps
 
-CMD ["uv", "run", "app/main.py"]
+# CMD ["uv", "run", "app/main.py"]
+CMD ["python", "-m", "app.main"]
