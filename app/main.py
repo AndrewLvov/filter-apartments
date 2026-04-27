@@ -3,16 +3,16 @@ from datetime import datetime as dtime
 import os
 import json
 from functools import wraps
-from time import sleep
+import gc
 
 from telethon import (TelegramClient, events)
 from telethon.tl.types import MessageEntityTextUrl
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from playwright.async_api import async_playwright
-from playwright._impl._errors import TimeoutError
+from playwright._impl._errors import TimeoutError, Error as PlaywrightError
 import asyncio
 import pytz
 
@@ -23,7 +23,6 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///adverts.db")
 Base = declarative_base()
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)
-session = Session()
 
 
 class StopProcessing(Exception):
@@ -42,7 +41,7 @@ class PermissionDenied(Exception):
 
 class Advert(Base):
     __tablename__ = 'adverts'
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, autoincrement=True, server_default=text("nextval('adverts_id_seq'::regclass)"))
     external_id = Column(Integer, unique=True)
     url = Column(String, unique=False)
     district = Column(String)
@@ -116,104 +115,126 @@ def extract_fields(text):
 
 async def extract_otodom_info(url):
     async with async_playwright() as p:
-        browser = await p.chromium.launch()
-        page = await browser.new_page(
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                '--memory-pressure-off',
+                '--max_old_space_size=256'
+            ]
+        )
+        context = await browser.new_context()
+        page = await context.new_page(
             user_agent=
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/93.0.4577.82 Safari/537.36")
-        # test for HTTP 403, throw exception in that case
-        # Listen for responses and check for HTTP 403
-        async def handle_response(response):
-            if response.url == url and response.status == 403:
+
+        try:
+            response = await page.goto(url, timeout=15000)
+            if response and response.status == 403:
                 raise PermissionDenied("HTTP 403 Forbidden")
 
-        page.on("response", handle_response)
-        await page.goto(url)
-
-        # Extract year built
-        year_built = await page.evaluate('''
-            () => {
-                const paragraphs = document.querySelectorAll('p');
-                for (let i = 0; i < paragraphs.length; i++) {
-                    if (paragraphs[i].textContent.includes('Rok budowy')) {
-                        const nextParagraph = paragraphs[i].nextElementSibling;
-                        if (nextParagraph && nextParagraph.tagName === 'P') {
-                            return nextParagraph.textContent.trim();
+            year_built = await page.evaluate('''
+                () => {
+                    const paragraphs = document.querySelectorAll('p');
+                    for (let i = 0; i < paragraphs.length; i++) {
+                        if (paragraphs[i].textContent.includes('Rok budowy')) {
+                            const nextParagraph = paragraphs[i].nextElementSibling;
+                            if (nextParagraph && nextParagraph.tagName === 'P') {
+                                return nextParagraph.textContent.trim();
+                            }
                         }
                     }
+                    return null;
                 }
-                return null;
-            }
-        ''')
+            ''')
 
-        # Extract full content for animal-related checks
-        try:
-            year_built = year_built and int(year_built)
-        except ValueError:
-            print(f"Failed to extract year built from {year_built}")
-            year_built = None
-        content = await page.content()
-        
-        # Check for "bez zwierząt" and "zwierz"
-        no_animals = (
+            try:
+                if year_built and year_built.strip():
+                    year_built = int(year_built)
+                else:
+                    year_built = None
+            except ValueError:
+                print(f"Failed to extract year built from {year_built}")
+                year_built = None
+
+            content = await page.content()
+            no_animals = (
                 "bez zwierząt" in content.lower()
-                or "zwierzęta nie akceptowane" in content.lower())
-        animals_mentioned = extract_context(content.lower(), "zwierz")
-        
-        await browser.close()
-        
-        return {
-            "year_built": year_built,
-            "no_animals": no_animals,
-            "animals_mentioned": animals_mentioned
-        }
+                or "zwierzęta nie akceptowane" in content.lower()
+            )
+            animals_mentioned = extract_context(content.lower(), "zwierz")
+
+            return {
+                "year_built": year_built,
+                "no_animals": no_animals,
+                "animals_mentioned": animals_mentioned
+            }
+        finally:
+            for coro in [page.close(), context.close(), browser.close()]:
+                try:
+                    await asyncio.wait_for(coro, timeout=10)
+                except Exception:
+                    pass
+            gc.collect()
 
 async def extract_olx_info(url):
     async with async_playwright() as p:
-        browser = await p.chromium.launch()
-        page = await browser.new_page(
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                '--no-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                '--memory-pressure-off',
+                '--max_old_space_size=256'
+            ]
+        )
+        context = await browser.new_context()
+        page = await context.new_page(
             user_agent=
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/93.0.4577.82 Safari/537.36")
-        async def handle_response(response):
-            if response.url == url and response.status == 403:
+
+        try:
+            response = await page.goto(url, timeout=15000)
+            if response and response.status == 403:
                 raise PermissionDenied("HTTP 403 Forbidden")
 
-        page.on("response", handle_response)
-        await page.goto(url)
-
-        # Wait for the main content to load
-        # try:
-        #     await page.wait_for_selector('#mainContent', timeout=5)
-        # except TimeoutError:
-        #     content = await page.content()
-        #     raise
-        #
-        # Extract the content of the specific element
-        content = await page.evaluate('''
-            () => {
-                const descriptionElement = document.querySelector('[data-cy="ad_description"]');
-                return descriptionElement ? descriptionElement.innerText : '';
-            }
-        ''')
-        
-        # Check for "bez zwierząt" and "zwierz"
-        no_animals = (
+            content = await page.evaluate('''
+                () => {
+                    const descriptionElement = document.querySelector('[data-cy="ad_description"]');
+                    return descriptionElement ? descriptionElement.innerText : '';
+                }
+            ''')
+            
+            no_animals = (
                 "bez zwierząt" in content.lower() or
                 "zwierzęta nie akceptowane" in content.lower() or
                 'zwierzęta nie są akceptowane' in content.lower() or
                 "nieposiadających zwierząt" in content.lower()
-        )
-        animals_mentioned = extract_context(content.lower(), "zwierz")
-        
-        await browser.close()
-
-        return {
-            "no_animals": no_animals,
-            "animals_mentioned": animals_mentioned
-        }
+            )
+            animals_mentioned = extract_context(content.lower(), "zwierz")
+            
+            return {
+                "no_animals": no_animals,
+                "animals_mentioned": animals_mentioned
+            }
+        finally:
+            for coro in [page.close(), context.close(), browser.close()]:
+                try:
+                    await asyncio.wait_for(coro, timeout=10)
+                except Exception:
+                    pass
+            gc.collect()
 
 def extract_context(text, search_term):
     words = text.split()
@@ -295,72 +316,84 @@ async def process_message(event, client):
         url = [e.url for e in event.entities if isinstance(e, MessageEntityTextUrl)][0]
     except IndexError:
         url = None
-    if session.query(Advert).filter_by(url=url).first():
-        return
-        # raise StopProcessing()
+    
+    # Use proper session management
+    with Session() as session:
+        if session.query(Advert).filter_by(url=url).first():
+            return
+            # raise StopProcessing()
 
-    text = event.message
-    try:
-        text = text.message
-    except AttributeError:
-        pass
+        text = event.message
+        try:
+            text = text.message
+        except AttributeError:
+            pass
 
-    if not event.entities:
-        return
+        if not event.entities:
+            return
 
-    advert = extract_fields(text)
-    advert['url'] = url
+        advert = extract_fields(text)
+        advert['url'] = url
 
-    if event.date < PROCESS_FROM_DATE:
-        raise StopProcessing()
+        if event.date < PROCESS_FROM_DATE:
+            raise StopProcessing()
 
-    # Extract media from the original message
-    media = event.media if event.media else None
+        # Extract media from the original message
+        media = event.media if event.media else None
 
-    # Extract additional information based on the URL
-    try:
-        if 'otodom.pl' in url:
-            additional_info = await extract_otodom_info(url)
-        elif 'olx.pl' in url:
-            try:
-                additional_info = await extract_olx_info(url)
-            except TimeoutError as e:
-                print(e)
-                additional_info = {
-                    "no_animals": False,
-                    "animals_mentioned": None
-                }
-        else:
-            additional_info = {}
-    except PermissionDenied:
-        print(f"Got HTTP 403 from {url}")
-        sleep(300)
-        return
+        # Extract additional information based on the URL
+        try:
+            if 'otodom.pl' in url:
+                additional_info = await asyncio.wait_for(extract_otodom_info(url), timeout=60)
+            elif 'olx.pl' in url:
+                try:
+                    additional_info = await asyncio.wait_for(extract_olx_info(url), timeout=60)
+                except (TimeoutError, asyncio.TimeoutError) as e:
+                    print(f"Timeout scraping {url}: {e}")
+                    additional_info = {
+                        "no_animals": False,
+                        "animals_mentioned": None
+                    }
+            else:
+                additional_info = {}
+        except PermissionDenied:
+            print(f"Got HTTP 403 from {url}, skipping")
+            return
+        except (PlaywrightError, asyncio.TimeoutError) as e:
+            print(f"Playwright error for {url}, skipping: {e}")
+            return
 
-    # Update advert with additional information
-    advert.update(additional_info)
+        # Update advert with additional information
+        advert.update(additional_info)
 
-    new_advert = Advert(**advert)
-    session.add(new_advert)
-    session.commit()
+        # Ensure year_built is None if it's an empty string to avoid database errors
+        if advert.get('year_built') == '':
+            advert['year_built'] = None
 
-    print(f"Processed and saved advert {advert.get('url')}")
-    print(json.dumps(advert, indent=4, cls=DateTimeEncoder))
+        new_advert = Advert(**advert)
+        session.add(new_advert)
+        session.commit()
 
-    # Filter and send the advert
-    filters = (
-        filter_room_count(3, 4),
-        filter_regions(exclude=(
-            'Praga_Południe', 'Praga_Północ', "Białołęka")),
-        filter_area(min_area=50, max_area=200),
-        filter_price_to_area_ratio(min_ratio=60, max_ratio=110),
-        # filter_year_built(min_year=2017),
-    )
-    filter_results = {f.__name__: f(advert) for f in filters}
-    print(f"Filter results: {json.dumps(filter_results, indent=4)}")
-    if all(filter_results.values()):
-        formatted_message = format_advert(advert)
-        await send_to_telegram(client, OUTPUT_CHAT_ID, formatted_message, media)
+        print(f"Processed and saved advert {advert.get('url')}")
+        print(json.dumps(advert, indent=4, cls=DateTimeEncoder))
+
+        # Filter and send the advert
+        filters = (
+            filter_room_count(3, 4),
+            filter_regions(exclude=(
+                'Praga_Południe', 'Praga_Północ', "Białołęka")),
+            filter_area(min_area=50, max_area=200),
+            filter_price_to_area_ratio(min_ratio=60, max_ratio=110),
+            # filter_year_built(min_year=2017),
+        )
+        filter_results = {f.__name__: f(advert) for f in filters}
+        print(f"Filter results: {json.dumps(filter_results, indent=4)}")
+        if all(filter_results.values()):
+            formatted_message = format_advert(advert)
+            await send_to_telegram(client, OUTPUT_CHAT_ID, formatted_message, media)
+    
+    # Force garbage collection after processing each message
+    gc.collect()
 
 async def main():
     session_path = os.getenv('TELEGRAM_SESSION_PATH', '/app/session/bot')
@@ -381,6 +414,8 @@ async def main():
     try:
         async for message in client.iter_messages(input_chat):
             await process_message(message, client)
+            # Add small delay to prevent overwhelming the system
+            await asyncio.sleep(1)
     except StopProcessing:
         pass
     
