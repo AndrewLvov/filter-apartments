@@ -13,6 +13,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from playwright.async_api import async_playwright
 from playwright._impl._errors import TimeoutError, Error as PlaywrightError
+import httpx
 import asyncio
 import pytz
 
@@ -21,8 +22,11 @@ load_dotenv()
 # Database setup
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///adverts.db")
 Base = declarative_base()
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
 Session = sessionmaker(bind=engine)
+
+# Limit concurrent Playwright browser instances to prevent OOM crashes
+_playwright_semaphore = asyncio.Semaphore(1)
 
 
 class StopProcessing(Exception):
@@ -114,77 +118,50 @@ def extract_fields(text):
 
 
 async def extract_otodom_info(url):
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=[
-                '--no-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--disable-web-security',
-                '--disable-features=VizDisplayCompositor',
-                '--memory-pressure-off',
-                '--max_old_space_size=256'
-            ]
-        )
-        context = await browser.new_context()
-        page = await context.new_page(
-            user_agent=
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/93.0.4577.82 Safari/537.36")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "pl-PL,pl;q=0.9,en;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+    }
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+        response = await client.get(url, headers=headers)
+        if response.status_code == 403:
+            raise PermissionDenied("HTTP 403 Forbidden")
+        response.raise_for_status()
+        html = response.text
 
-        try:
-            response = await page.goto(url, timeout=15000)
-            if response and response.status == 403:
-                raise PermissionDenied("HTTP 403 Forbidden")
+    m = re.search(r'<script id="__NEXT_DATA__"[^>]*>({.*?})</script>', html, re.DOTALL)
+    if not m:
+        return {"year_built": None, "no_animals": False, "animals_mentioned": None}
 
-            year_built = await page.evaluate('''
-                () => {
-                    const paragraphs = document.querySelectorAll('p');
-                    for (let i = 0; i < paragraphs.length; i++) {
-                        if (paragraphs[i].textContent.includes('Rok budowy')) {
-                            const nextParagraph = paragraphs[i].nextElementSibling;
-                            if (nextParagraph && nextParagraph.tagName === 'P') {
-                                return nextParagraph.textContent.trim();
-                            }
-                        }
-                    }
-                    return null;
-                }
-            ''')
+    data = json.loads(m.group(1))
+    ad = data['props']['pageProps']['ad']
 
-            try:
-                if year_built and year_built.strip():
-                    year_built = int(year_built)
-                else:
-                    year_built = None
-            except ValueError:
-                print(f"Failed to extract year built from {year_built}")
-                year_built = None
+    try:
+        year_built = int(ad['target']['Build_year'])
+    except (KeyError, TypeError, ValueError):
+        year_built = None
 
-            content = await page.content()
-            no_animals = (
-                "bez zwierząt" in content.lower()
-                or "zwierzęta nie akceptowane" in content.lower()
-            )
-            animals_mentioned = extract_context(content.lower(), "zwierz")
+    description = re.sub(r'<[^>]+>', ' ', ad.get('description', ''))
+    description_lower = description.lower()
 
-            return {
-                "year_built": year_built,
-                "no_animals": no_animals,
-                "animals_mentioned": animals_mentioned
-            }
-        finally:
-            for coro in [page.close(), context.close(), browser.close()]:
-                try:
-                    await asyncio.wait_for(coro, timeout=10)
-                except Exception:
-                    pass
-            gc.collect()
+    no_animals = (
+        "bez zwierząt" in description_lower
+        or "zwierzęta nie akceptowane" in description_lower
+        or "zwierzęta nie są akceptowane" in description_lower
+        or "nieposiadających zwierząt" in description_lower
+    )
+    animals_mentioned = extract_context(description_lower, "zwierz")
+
+    return {
+        "year_built": year_built,
+        "no_animals": no_animals,
+        "animals_mentioned": animals_mentioned,
+    }
 
 async def extract_olx_info(url):
-    async with async_playwright() as p:
+    async with _playwright_semaphore, async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
             args=[
@@ -197,12 +174,12 @@ async def extract_olx_info(url):
                 '--max_old_space_size=256'
             ]
         )
-        context = await browser.new_context()
-        page = await context.new_page(
+        context = await browser.new_context(
             user_agent=
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/93.0.4577.82 Safari/537.36")
+        page = await context.new_page()
 
         try:
             response = await page.goto(url, timeout=15000)
@@ -314,9 +291,12 @@ async def send_to_telegram(client, chat_id, message, media=None):
 async def process_message(event, client):
     try:
         url = [e.url for e in event.entities if isinstance(e, MessageEntityTextUrl)][0]
-    except IndexError:
+    except (IndexError, TypeError):
         url = None
-    
+
+    if not url:
+        return
+
     # Use proper session management
     with Session() as session:
         if session.query(Advert).filter_by(url=url).first():
@@ -395,16 +375,34 @@ async def process_message(event, client):
     # Force garbage collection after processing each message
     gc.collect()
 
+_last_activity = dtime.now()
+WATCHDOG_TIMEOUT_HOURS = 6
+
+
+async def watchdog():
+    """Exit the process if no Telegram update has been received for WATCHDOG_TIMEOUT_HOURS.
+    Kubernetes will restart the pod, re-establishing the update stream."""
+    while True:
+        await asyncio.sleep(600)  # check every 10 minutes
+        idle_seconds = (dtime.now() - _last_activity).total_seconds()
+        if idle_seconds > WATCHDOG_TIMEOUT_HOURS * 3600:
+            print(f"No activity for {idle_seconds / 3600:.1f}h, restarting to reconnect.")
+            raise SystemExit(1)
+
+
 async def main():
+    global _last_activity
     session_path = os.getenv('TELEGRAM_SESSION_PATH', '/app/session/bot')
     client = TelegramClient(session_path, API_ID, API_HASH)
     # await client.start(bot_token=BOT_TOKEN)
     await client.start(phone=os.getenv("TELEGRAM_PHONE"))
-    
+
     @client.on(events.NewMessage(chats=INPUT_CHAT_ID))
     async def handler(event):
+        global _last_activity
+        _last_activity = dtime.now()
         await process_message(event, client)
-        
+
     # async for dialog in client.iter_dialogs():
     #     if not dialog.is_group and dialog.is_channel:
     #         print(dialog.id, dialog.name)
@@ -418,7 +416,10 @@ async def main():
             await asyncio.sleep(1)
     except StopProcessing:
         pass
-    
+
+    # Watchdog starts only after the backlog is drained — resets on each new live message
+    _last_activity = dtime.now()
+    asyncio.ensure_future(watchdog())
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
