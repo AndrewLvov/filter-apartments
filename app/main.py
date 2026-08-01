@@ -3,7 +3,6 @@ from datetime import datetime as dtime
 import os
 import json
 from functools import wraps
-import gc
 
 from telethon import (TelegramClient, events)
 from telethon.tl.types import MessageEntityTextUrl
@@ -155,10 +154,6 @@ async def extract_otodom_info(url):
         "animals_mentioned": animals_mentioned,
     }
 
-async def extract_olx_info(url):
-    # OLX is protected by Cloudflare and cannot be scraped reliably.
-    # Return safe defaults so the message is still saved and filtered.
-    return {"no_animals": False, "animals_mentioned": None}
 
 def extract_context(text, search_term):
     words = text.split()
@@ -279,8 +274,6 @@ async def process_message(event, client):
             except Exception as e:
                 print(f"Error scraping otodom {url}, using defaults: {e}")
                 additional_info = {"year_built": None, "no_animals": False, "animals_mentioned": None}
-        elif 'olx.pl' in url:
-            additional_info = await extract_olx_info(url)
 
         # Update advert with additional information
         advert.update(additional_info)
@@ -311,8 +304,6 @@ async def process_message(event, client):
             formatted_message = format_advert(advert)
             await send_to_telegram(client, OUTPUT_CHAT_ID, formatted_message, media)
     
-    # Force garbage collection after processing each message
-    gc.collect()
 
 _last_activity = dtime.now()
 WATCHDOG_TIMEOUT_HOURS = 6
