@@ -9,24 +9,7 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
-    libnss3 \
-    libnspr4 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libdbus-1-3 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libasound2 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libatspi2.0-0 \
-    libwayland-client0
+    && rm -rf /var/lib/apt/lists/*
 
 ADD https://astral.sh/uv/install.sh /uv-installer.sh
 RUN sh /uv-installer.sh && rm /uv-installer.sh
@@ -36,8 +19,4 @@ RUN uv sync --frozen --no-editable
 
 COPY . .
 
-# Install Playwright browsers after installing playwright through uv sync
-RUN uv run --no-sync playwright install --with-deps
-
-# CMD ["uv", "run", "app/main.py"]
 CMD ["python", "-m", "app.main"]

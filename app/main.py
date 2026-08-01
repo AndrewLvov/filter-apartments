@@ -11,8 +11,6 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from playwright.async_api import async_playwright
-from playwright._impl._errors import TimeoutError, Error as PlaywrightError
 import httpx
 import asyncio
 import pytz
@@ -24,9 +22,6 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///adverts.db")
 Base = declarative_base()
 engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
 Session = sessionmaker(bind=engine)
-
-# Limit concurrent Playwright browser instances to prevent OOM crashes
-_playwright_semaphore = asyncio.Semaphore(1)
 
 
 class StopProcessing(Exception):
@@ -161,57 +156,9 @@ async def extract_otodom_info(url):
     }
 
 async def extract_olx_info(url):
-    async with _playwright_semaphore, async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=[
-                '--no-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--disable-web-security',
-                '--disable-features=VizDisplayCompositor',
-                '--memory-pressure-off',
-                '--max_old_space_size=256'
-            ]
-        )
-        context = await browser.new_context(
-            user_agent=
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/93.0.4577.82 Safari/537.36")
-        page = await context.new_page()
-
-        try:
-            response = await page.goto(url, timeout=15000)
-            if response and response.status == 403:
-                raise PermissionDenied("HTTP 403 Forbidden")
-
-            content = await page.evaluate('''
-                () => {
-                    const descriptionElement = document.querySelector('[data-cy="ad_description"]');
-                    return descriptionElement ? descriptionElement.innerText : '';
-                }
-            ''')
-            
-            no_animals = (
-                "bez zwierząt" in content.lower() or
-                "zwierzęta nie akceptowane" in content.lower() or
-                'zwierzęta nie są akceptowane' in content.lower() or
-                "nieposiadających zwierząt" in content.lower()
-            )
-            animals_mentioned = extract_context(content.lower(), "zwierz")
-            
-            return {
-                "no_animals": no_animals,
-                "animals_mentioned": animals_mentioned
-            }
-        finally:
-            for coro in [page.close(), context.close(), browser.close()]:
-                try:
-                    await asyncio.wait_for(coro, timeout=10)
-                except Exception:
-                    pass
-            gc.collect()
+    # OLX is protected by Cloudflare and cannot be scraped reliably.
+    # Return safe defaults so the message is still saved and filtered.
+    return {"no_animals": False, "animals_mentioned": None}
 
 def extract_context(text, search_term):
     words = text.split()
@@ -322,26 +269,18 @@ async def process_message(event, client):
         media = event.media if event.media else None
 
         # Extract additional information based on the URL
-        try:
-            if 'otodom.pl' in url:
+        additional_info = {}
+        if 'otodom.pl' in url:
+            try:
                 additional_info = await asyncio.wait_for(extract_otodom_info(url), timeout=60)
-            elif 'olx.pl' in url:
-                try:
-                    additional_info = await asyncio.wait_for(extract_olx_info(url), timeout=60)
-                except (TimeoutError, asyncio.TimeoutError) as e:
-                    print(f"Timeout scraping {url}: {e}")
-                    additional_info = {
-                        "no_animals": False,
-                        "animals_mentioned": None
-                    }
-            else:
-                additional_info = {}
-        except PermissionDenied:
-            print(f"Got HTTP 403 from {url}, skipping")
-            return
-        except (PlaywrightError, asyncio.TimeoutError) as e:
-            print(f"Playwright error for {url}, skipping: {e}")
-            return
+            except PermissionDenied:
+                print(f"Got HTTP 403 from {url}, skipping")
+                return
+            except Exception as e:
+                print(f"Error scraping otodom {url}, using defaults: {e}")
+                additional_info = {"year_built": None, "no_animals": False, "animals_mentioned": None}
+        elif 'olx.pl' in url:
+            additional_info = await extract_olx_info(url)
 
         # Update advert with additional information
         advert.update(additional_info)
