@@ -76,6 +76,11 @@ spec:
                 secretKeyRef:
                   name: filter-apartments
                   key: telegram_api_hash
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: filter-apartments
+                  key: telegram_bot_token
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}

@@ -1,0 +1,24 @@
+# One file = one search configuration. All enabled files in this directory are
+# evaluated against every advert; each one reports to its own chat.
+name = "apartments-3-4-rooms"
+enabled = true
+
+# Re-evaluate adverts that are already in the DB (e.g. when this config is new).
+# Keep false for the original config so old adverts are not re-sent.
+backfill = false
+
+# Optional. Falls back to TELEGRAM_OUTPUT_GROUP_ID from the environment.
+output_chat_id = -4517914776   # group "Mieszkania"
+
+[filters]
+min_rooms = 3
+max_rooms = 4
+min_area = 50
+max_area = 200
+# max_price = 6000                # max rent in zł (commented = no limit)
+min_price_per_m2 = 60
+max_price_per_m2 = 110
+exclude_districts = ["Praga_Południe", "Praga_Północ", "Białołęka"]
+# include_districts = []
+# min_year_built = 2017
+# max_year_built = 2030

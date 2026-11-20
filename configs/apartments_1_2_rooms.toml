@@ -1,0 +1,15 @@
+name = "apartments-1-2-rooms"
+enabled = true
+backfill = true   # new config: also check adverts already stored in the DB
+
+output_chat_id = -5324499206   # group "Mieszkania (1-2rooms)"
+
+[filters]
+min_rooms = 1
+max_rooms = 2
+min_area = 25
+max_area = 60
+max_price = 4500
+min_price_per_m2 = 50
+max_price_per_m2 = 130
+exclude_districts = ["Praga_Południe", "Praga_Północ", "Białołęka"]
